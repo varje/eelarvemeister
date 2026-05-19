@@ -1,0 +1,39 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply text-slate-900 bg-slate-50 text-[11px] antialiased;
+  }
+}
+
+/* Custom scrollbar for high density feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
+}
+
+/* Table styles */
+table {
+  @apply w-full text-left border-collapse;
+}
+th {
+  @apply px-4 py-2 font-bold text-slate-500 border-r border-slate-200 bg-slate-50 sticky top-0 uppercase tracking-wider text-[9px];
+}
+td {
+  @apply px-4 py-1.5 border-r border-slate-100 align-middle;
+}
+tr {
+  @apply border-b border-slate-100 hover:bg-slate-50/50 transition-colors;
+}

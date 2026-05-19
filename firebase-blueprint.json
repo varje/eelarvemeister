@@ -1,0 +1,97 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Application user profile",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "createdAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Budget category",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["income", "expense", "both"] },
+        "parentId": { "type": "string" },
+        "isStarred": { "type": "boolean" },
+        "userId": { "type": "string" }
+      },
+      "required": ["name", "type", "userId"]
+    },
+    "Rule": {
+      "title": "Auto-categorization Rule",
+      "description": "Rule to automatically assign a category to a transaction",
+      "type": "object",
+      "properties": {
+        "pattern": { "type": "string" },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": { "type": "string", "enum": ["recipient", "description"] },
+              "pattern": { "type": "string" }
+            }
+          }
+        },
+        "categoryId": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["categoryId", "userId"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A single income or expense record",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "amount": { "type": "number" },
+        "recipient": { "type": "string" },
+        "description": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "userId": { "type": "string" },
+        "rawLine": { "type": "string" }
+      },
+      "required": ["date", "amount", "userId"]
+    },
+    "Budget": {
+      "title": "Budget",
+      "description": "Monthly budget for a category",
+      "type": "object",
+      "properties": {
+        "categoryId": { "type": "string" },
+        "month": { "type": "string" },
+        "amount": { "type": "number" },
+        "userId": { "type": "string" }
+      },
+      "required": ["categoryId", "month", "amount", "userId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Budget categories"
+    },
+    "/rules/{ruleId}": {
+      "schema": "Rule",
+      "description": "Auto-categorization rules"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Financial transactions"
+    },
+    "/budgets/{budgetId}": {
+      "schema": "Budget",
+      "description": "Monthly budgets"
+    }
+  }
+}

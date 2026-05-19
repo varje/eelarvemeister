@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isDataOwner() {
+      return isSignedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    function existingDataOwner() {
+      return isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUser(data) {
+      return data.username is string && data.username.size() <= 50 &&
+             (data.get('createdAt', null) != null || data.get('updatedAt', null) != null);
+    }
+
+    function isValidCategory(data) {
+      return data.name is string && data.name.size() <= 100 &&
+             data.type in ['income', 'expense', 'both'] &&
+             data.userId == request.auth.uid;
+    }
+
+    function isValidTransaction(data) {
+      return data.date is string && 
+             data.amount is number &&
+             data.userId == request.auth.uid;
+    }
+
+    function isValidBudget(data) {
+      return data.month is string && data.month.size() == 7 &&
+             data.amount is number &&
+             data.categoryId is string &&
+             data.userId == request.auth.uid;
+    }
+
+    function isValidRule(data) {
+      return data.userId == request.auth.uid &&
+             data.categoryId is string &&
+             (data.get('pattern', null) is string || data.get('conditions', null) is list);
+    }
+
+    // Collection matches
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'updatedAt']);
+    }
+
+    match /categories/{categoryId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidCategory(request.resource.data);
+      allow update: if isSignedIn() && existingDataOwner() && isValidCategory(request.resource.data) &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'isStarred', 'parentId', 'type']);
+      allow delete: if isSignedIn() && existingDataOwner();
+    }
+
+    match /transactions/{transactionId} {
+      allow read, list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidTransaction(request.resource.data);
+      allow update: if isSignedIn() && existingDataOwner() && isValidTransaction(request.resource.data);
+      allow delete: if isSignedIn() && existingDataOwner();
+    }
+
+    match /budgets/{budgetId} {
+      allow read, list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidBudget(request.resource.data);
+      allow update: if isSignedIn() && existingDataOwner() && isValidBudget(request.resource.data);
+      allow delete: if isSignedIn() && existingDataOwner();
+    }
+
+    match /rules/{ruleId} {
+      allow read, list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidRule(request.resource.data);
+      allow update: if isSignedIn() && existingDataOwner() && isValidRule(request.resource.data);
+      allow delete: if isSignedIn() && existingDataOwner();
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Eelarvemeister",
+  "description": "Eestikeelne eelarve äpp pangaväljavõtete impordiga ja automaatse kategoriseerimisega.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
