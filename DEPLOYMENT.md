@@ -51,9 +51,31 @@ If you want to use a **separate** Firebase project for production than the defau
 - `VITE_FIREBASE_STORAGE_BUCKET`: e.g. `your-app-id.firebasestorage.app`
 - `VITE_FIREBASE_MESSAGING_SENDER_ID`: e.g. `1234567890`
 - `VITE_FIREBASE_APP_ID`: e.g. `1:1234:web:abcd`
-- `VITE_FIREBASE_DATABASE_ID`: e.g. `ai-studio-...` (if using custom named Firestore databases)
+- `VITE_FIREBASE_DATABASE_ID`: e.g. `(default)` *(If you use your own Firebase project, Firestore almost certainly uses the standard `(default)` database ID rather than the GUID-named database of the original AI Studio project. Our latest update automatically defaults to `(default)` if you override the project ID, but you can explicitly specify it here if needed)*
 
 *Note: If these env variables are omitted, the application will fallback automatically to the configuration committed in `firebase-applet-config.json`.*
+
+---
+
+## 🛠️ Critical Troubleshooting: Google Login Infinite Loop / Reverts to Login
+
+If authenticating via Google succeeds but instead of loading the app dashboard it redirects you back to the login screen, it means **a Firestore operation failed immediately after login** (such as fetching/creating user profiles or loading default transaction categories).
+
+Here are the 2 steps to solve this in 30 seconds:
+
+### 1. Upload Firestore Security Rules (Mandatory)
+When setting up a new Firebase Project, Firestore's default rules are in locked mode, **fully blocking all reads and writes**.
+- Open your [Firebase Console](https://console.firebase.google.com).
+- Click on **Firestore Database** on the left menu.
+- Click on the **Rules** tab.
+- Copy the entire contents of the `/firestore.rules` file in this repository.
+- Paste it into the Rules editor in the console and click **Publish**.
+
+### 2. Verify Your Firestore Database is Provisioned
+- Ensure you have clicked **Create Database** under the Firestore section of your Firebase console and configured it in either Test or Locked mode.
+- If you override the `VITE_FIREBASE_PROJECT_ID` environment variable on Render, verify that you didn't accidentally include typos.
+
+---
 
 ### Server Configs
 - `NODE_ENV`: set to `production` *(Vite/Node performance optimization)*

@@ -58,9 +58,12 @@ export default function App() {
         } else {
           setUser(null);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Auth sync error:', err);
-        toast.error('Andmete laadimine ebaõnnestus. Palun proovi uuesti.');
+        const errDetail = err?.message || String(err);
+        toast.error(`Andmete laadimine ebaõnnestus: ${errDetail}. Palun kontrolli Firestore'i andmebaasi seoseid ning turvafaili (rules) seadeid.`, {
+          duration: 12000,
+        });
       } finally {
         setLoading(false);
       }

@@ -15,7 +15,7 @@ const config = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || firebaseConfig.measurementId,
 };
 
-const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || firebaseConfig.firestoreDatabaseId;
+const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || (import.meta.env.VITE_FIREBASE_PROJECT_ID ? '(default)' : firebaseConfig.firestoreDatabaseId);
 
 const app = initializeApp(config);
 export const db = getFirestore(app, databaseId);

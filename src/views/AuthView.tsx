@@ -15,7 +15,15 @@ export const AuthView = () => {
       toast.success('Sisselogimine õnnestus!');
     } catch (e: any) {
       console.error('Google login error:', e);
-      toast.error('Google sisselogimine ebaõnnestus: ' + (e.message || 'Tundmatu viga'));
+      let errorMessage = e.message || 'Tundmatu viga';
+      if (e.code === 'auth/unauthorized-domain') {
+        errorMessage = 'See domeen pole Firebase\'i lubatud domeenide hulgas. Lisage see Render.com domeen oma Firebase Console\'is "Authorized Domains" nimekirja.';
+      } else if (e.code === 'auth/operation-not-allowed') {
+        errorMessage = 'Google sisselogimine ebaõnnestus, kuna see on Firebase Console\'is lubamata. Palun aktiveerige Google sisselogimise meetod.';
+      }
+      toast.error('Sisselogimine ebaõnnestus: ' + errorMessage, {
+        duration: 8000,
+      });
     } finally {
       setLoading(false);
     }
