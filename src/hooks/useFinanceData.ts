@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { dbService, isLocalMode } from '../services/db';
+import { dbService } from '../services/db';
 import { Category, Transaction, Rule, Budget } from '../types';
 import { auth, db } from '../lib/firebase';
 import { onSnapshot, query, collection, where, orderBy } from 'firebase/firestore';
-import { localDbService } from '../services/localDb';
 
 export const useFinanceData = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -21,36 +20,6 @@ export const useFinanceData = () => {
     }
 
     setLoading(true);
-
-    if (isLocalMode()) {
-      const loadLocalData = () => {
-        Promise.all([
-          dbService.getCategories(userId),
-          dbService.getTransactions(userId),
-          dbService.getRules(userId),
-          localDbService.getBudgets(userId)
-        ])
-          .then(([cats, trans, rls, bgs]) => {
-            setCategories(cats);
-            setTransactions(trans);
-            setRules(rls);
-            setBudgets(bgs);
-          })
-          .catch(e => {
-            console.error('Failed to load reactive local data:', e);
-          })
-          .finally(() => {
-            setLoading(false);
-          });
-      };
-
-      loadLocalData();
-
-      window.addEventListener('eelarvemeister_db_changed', loadLocalData);
-      return () => {
-        window.removeEventListener('eelarvemeister_db_changed', loadLocalData);
-      };
-    }
 
     // Queries
     const qCats = query(collection(db, 'categories'), where('userId', '==', userId));

@@ -1,10 +1,10 @@
 {
-  "projectId": "eelarvemeister",
-  "appId": "1:76283351340:web:cc9d1f0ec8faab11635c89",
-  "apiKey": "AIzaSyCuvHOWpz5q48ylj-v0fdmebfjTG2mMeaI",
-  "authDomain": "eelarvemeister.firebaseapp.com",
-  "firestoreDatabaseId": "",
-  "storageBucket": "eelarvemeister.firebasestorage.app",
-  "messagingSenderId": "76283351340",
+  "projectId": "analytical-lightning-907pf",
+  "appId": "1:11453761860:web:5501ed4e2ae302d3f32f11",
+  "apiKey": "AIzaSyDTiaAsJ6cmm4w51Z9ZS3mIYawULcOzxLg",
+  "authDomain": "analytical-lightning-907pf.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-02e2b251-c1c2-40a2-bbd3-9b4ea6cc19b8",
+  "storageBucket": "analytical-lightning-907pf.firebasestorage.app",
+  "messagingSenderId": "11453761860",
+  "measurementId": ""
 }
-s
