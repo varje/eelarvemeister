@@ -19,7 +19,8 @@
         "type": { "type": "string", "enum": ["income", "expense", "both"] },
         "parentId": { "type": "string" },
         "isStarred": { "type": "boolean" },
-        "userId": { "type": "string" }
+        "userId": { "type": "string" },
+        "savingsBucket": { "type": "string", "enum": ["necessities", "entertainment", "investments", "unassigned", "income", null] }
       },
       "required": ["name", "type", "userId"]
     },

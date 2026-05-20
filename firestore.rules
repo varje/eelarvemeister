@@ -35,7 +35,8 @@ service cloud.firestore {
     function isValidCategory(data) {
       return data.name is string && data.name.size() <= 100 &&
              data.type in ['income', 'expense', 'both'] &&
-             data.userId == request.auth.uid;
+             data.userId == request.auth.uid &&
+             (!('savingsBucket' in data) || data.savingsBucket == null || (data.savingsBucket is string && data.savingsBucket in ['necessities', 'entertainment', 'investments', 'unassigned', 'income']));
     }
 
     function isValidTransaction(data) {
@@ -70,7 +71,7 @@ service cloud.firestore {
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn() && isValidCategory(request.resource.data);
       allow update: if isSignedIn() && existingDataOwner() && isValidCategory(request.resource.data) &&
-                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'isStarred', 'parentId', 'type']);
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'isStarred', 'parentId', 'type', 'savingsBucket']);
       allow delete: if isSignedIn() && existingDataOwner();
     }
 

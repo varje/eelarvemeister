@@ -7,7 +7,7 @@ import { et } from 'date-fns/locale';
 import { dbService } from '@/services/db';
 import { auth } from '@/lib/firebase';
 
-const BudgetCell = ({ categoryId, month, initialAmount }: { categoryId: string, month: string, initialAmount: number }) => {
+const BudgetCell = ({ categoryId, month, initialAmount, prefix = '' }: { categoryId: string, month: string, initialAmount: number, prefix?: string }) => {
   const [value, setValue] = useState(initialAmount === 0 ? '' : initialAmount.toString());
   const [isSaving, setIsSaving] = useState(false);
 
@@ -33,7 +33,8 @@ const BudgetCell = ({ categoryId, month, initialAmount }: { categoryId: string, 
   };
 
   return (
-    <div className="relative group flex items-center justify-end w-full">
+    <div className="relative group flex items-center justify-end w-full gap-0.5">
+      {prefix && initialAmount > 0 && <span className="text-slate-400 font-mono text-[10px]">{prefix}</span>}
       <input
         type="text"
         value={value}
@@ -69,11 +70,21 @@ export const HomeView = () => {
     return Array.from(months).sort();
   }, [transactions, budgets]);
 
+  const isCategoryStarred = React.useCallback((catId?: string | null) => {
+    if (!catId) return false;
+    const cat = categories.find(c => c.id === catId);
+    if (!cat) return false;
+    if (cat.isStarred) return true;
+    if (cat.parentId) {
+      const parent = categories.find(p => p.id === cat.parentId);
+      return !!parent?.isStarred;
+    }
+    return false;
+  }, [categories]);
+
   const stats = useMemo(() => {
     const relevantTransactions = transactions.filter(t => {
-      if (!t.categoryId) return true; // Include uncategorized
-      const cat = categories.find(c => c.id === t.categoryId);
-      return !cat?.isStarred;
+      return !isCategoryStarred(t.categoryId);
     });
 
     const income = relevantTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
@@ -81,8 +92,7 @@ export const HomeView = () => {
     const balance = income - expense;
 
     const relevantBudgets = budgets.filter(b => {
-      const cat = categories.find(c => c.id === b.categoryId);
-      return !cat?.isStarred;
+      return !isCategoryStarred(b.categoryId);
     });
 
     const budgetIncome = relevantBudgets.filter(b => {
@@ -109,7 +119,50 @@ export const HomeView = () => {
       avgBudgetIncome: budgetIncome / monthCount,
       avgBudgetExpense: budgetExpense / monthCount
     };
-  }, [transactions, categories, allMonths, budgets]);
+  }, [transactions, categories, allMonths, budgets, isCategoryStarred]);
+
+  const groupStats = useMemo(() => {
+    const relevantTransactions = transactions.filter(t => !isCategoryStarred(t.categoryId));
+    const relevantBudgets = budgets.filter(b => !isCategoryStarred(b.categoryId));
+
+    const getStatsForType = (type: 'income' | 'expense') => {
+      const typeCategories = categories.filter(c => (c.type === type || c.type === 'both') && !isCategoryStarred(c.id));
+      const typeCategoryIds = typeCategories.map(c => c.id);
+
+      const monthsData = allMonths.map(m => {
+        const monthBudget = relevantBudgets
+          .filter(b => b.month === m && typeCategoryIds.includes(b.categoryId))
+          .reduce((sum, b) => sum + b.amount, 0);
+
+        const monthTrans = relevantTransactions.filter(t => t.date.startsWith(m));
+        const monthActual = type === 'income'
+          ? monthTrans.filter(t => t.amount > 0 && (typeCategoryIds.includes(t.categoryId) || !t.categoryId)).reduce((sum, t) => sum + t.amount, 0)
+          : Math.abs(monthTrans.filter(t => t.amount < 0 && (typeCategoryIds.includes(t.categoryId) || !t.categoryId)).reduce((sum, t) => sum + t.amount, 0));
+
+        return { month: m, budget: monthBudget, actual: monthActual };
+      });
+
+      const totalBudget = monthsData.reduce((sum, d) => sum + d.budget, 0);
+      const totalActual = monthsData.reduce((sum, d) => sum + d.actual, 0);
+
+      const monthCount = allMonths.length || 1;
+      const avgBudget = totalBudget / monthCount;
+      const avgActual = totalActual / monthCount;
+
+      return {
+        monthsData,
+        totalBudget,
+        totalActual,
+        avgBudget,
+        avgActual
+      };
+    };
+
+    return {
+      income: getStatsForType('income'),
+      expense: getStatsForType('expense')
+    };
+  }, [transactions, categories, budgets, allMonths, isCategoryStarred]);
 
   const renderCategoryRows = (type: 'income' | 'expense') => {
     const parentCategories = categories
@@ -164,24 +217,32 @@ export const HomeView = () => {
                   <td className={cn(
                     "px-4 py-1.5 text-right border-r font-mono text-[10px] bg-slate-50/30 w-20"
                   )}>
-                    <BudgetCell categoryId={cat.id} month={m} initialAmount={mBudget} />
+                    <BudgetCell categoryId={cat.id} month={m} initialAmount={mBudget} prefix={type === 'expense' ? '-' : ''} />
                   </td>
                   <td className={cn(
                     "px-4 py-1.5 text-right border-r font-mono text-[10px]",
                     mActual > 0 ? (type === 'income' ? "text-emerald-500" : "text-rose-500") : "text-slate-300"
                   )}>
-                    {mActual > 0 ? mActual.toFixed(0) : '-'}
+                    {mActual > 0 ? (type === 'income' ? '' : '-') + mActual.toFixed(2) : '-'}
                   </td>
                 </React.Fragment>
               );
             })}
-            <td className="px-4 py-1.5 text-right border-r font-mono font-bold text-xs bg-slate-50/70 text-slate-500">{totalBudget.toFixed(2)}</td>
+            <td className="px-4 py-1.5 text-right border-r font-mono font-bold text-xs bg-slate-50/70 text-slate-500">
+              {type === 'income' ? '' : totalBudget > 0 ? '-' : ''}{totalBudget.toFixed(2)}
+            </td>
             <td className={cn(
               "px-4 py-1.5 text-right border-r font-mono font-bold text-xs bg-slate-50/50",
               type === 'income' ? "text-emerald-700" : "text-rose-700"
-            )}>{totalActual.toFixed(2)}</td>
-            <td className="px-4 py-1.5 text-right border-r font-mono text-slate-400 bg-slate-50/70">{(totalBudget / monthCount).toFixed(2)}</td>
-            <td className="px-4 py-1.5 text-right border-r font-mono text-slate-500 bg-slate-50/50">{(totalActual / monthCount).toFixed(2)}</td>
+            )}>
+              {type === 'income' ? '' : totalActual > 0 ? '-' : ''}{totalActual.toFixed(2)}
+            </td>
+            <td className="px-4 py-1.5 text-right border-r font-mono text-slate-400 bg-slate-50/70">
+              {type === 'income' ? '' : (totalBudget / monthCount) > 0 ? '-' : ''}{(totalBudget / monthCount).toFixed(2)}
+            </td>
+            <td className="px-4 py-1.5 text-right border-r font-mono text-slate-500 bg-slate-50/50">
+              {type === 'income' ? '' : (totalActual / monthCount) > 0 ? '-' : ''}{(totalActual / monthCount).toFixed(2)}
+            </td>
             <td className={cn(
               "px-4 py-1.5 text-right font-mono text-[10px] bg-slate-50/70 shrink-0",
               totalBudget > 0 ? (
@@ -226,21 +287,29 @@ export const HomeView = () => {
                       <td className={cn(
                         "px-4 py-1 text-right border-r font-mono text-[9px] bg-slate-50/40 w-20"
                       )}>
-                        <BudgetCell categoryId={sub.id} month={m} initialAmount={mBudget} />
+                        <BudgetCell categoryId={sub.id} month={m} initialAmount={mBudget} prefix={type === 'expense' ? '-' : ''} />
                       </td>
                       <td className={cn(
                         "px-4 py-1 text-right border-r font-mono text-[9px]",
                         mAmount > 0 ? "text-slate-500" : "text-slate-200"
                       )}>
-                        {mAmount > 0 ? mAmount.toFixed(0) : '-'}
+                        {mAmount > 0 ? (type === 'income' ? '' : '-') + mAmount.toFixed(2) : '-'}
                       </td>
                     </React.Fragment>
                   );
                 })}
-                <td className="px-4 py-1 text-right border-r font-mono text-slate-400 bg-slate-50/40">{subTotalBudget.toFixed(2)}</td>
-                <td className="px-4 py-1 text-right border-r font-mono text-slate-600 font-medium bg-slate-50/20">{subActual.toFixed(2)}</td>
-                <td className="px-4 py-1 text-right border-r font-mono text-slate-300 bg-slate-50/40">{(subTotalBudget / monthCount).toFixed(2)}</td>
-                <td className="px-4 py-1 text-right border-r font-mono text-slate-400 bg-slate-50/20">{(subActual / monthCount).toFixed(2)}</td>
+                <td className="px-4 py-1 text-right border-r font-mono text-slate-400 bg-slate-50/40">
+                  {type === 'income' ? '' : subTotalBudget > 0 ? '-' : ''}{subTotalBudget.toFixed(2)}
+                </td>
+                <td className="px-4 py-1 text-right border-r font-mono text-slate-600 font-medium bg-slate-50/20">
+                  {type === 'income' ? '' : subActual > 0 ? '-' : ''}{subActual.toFixed(2)}
+                </td>
+                <td className="px-4 py-1 text-right border-r font-mono text-slate-300 bg-slate-50/40">
+                  {type === 'income' ? '' : (subTotalBudget / monthCount) > 0 ? '-' : ''}{(subTotalBudget / monthCount).toFixed(2)}
+                </td>
+                <td className="px-4 py-1 text-right border-r font-mono text-slate-400 bg-slate-50/20">
+                  {type === 'income' ? '' : (subActual / monthCount) > 0 ? '-' : ''}{(subActual / monthCount).toFixed(2)}
+                </td>
                 <td className={cn(
                   "px-4 py-1 text-right font-mono text-[9px] bg-slate-50/40 shrink-0",
                   subTotalBudget > 0 ? (
@@ -285,7 +354,7 @@ export const HomeView = () => {
                   "px-4 py-1.5 text-right border-r font-mono text-[9px]",
                   mAmount > 0 ? "text-amber-500/70" : "text-slate-200"
                 )}>
-                  {mAmount > 0 ? mAmount.toFixed(0) : '-'}
+                  {mAmount > 0 ? (type === 'income' ? '' : '-') + mAmount.toFixed(2) : '-'}
                 </td>
               </React.Fragment>
             );
@@ -294,9 +363,11 @@ export const HomeView = () => {
           <td className={cn(
             "px-4 py-1.5 text-right border-r font-mono font-bold bg-amber-50/40 text-xs",
             type === 'income' ? "text-emerald-500/70" : "text-rose-500/70"
-          )}>{uncategorizedTotal.toFixed(2)}</td>
+          )}>{type === 'income' ? '' : uncategorizedTotal > 0 ? '-' : ''}{uncategorizedTotal.toFixed(2)}</td>
           <td className="px-4 py-1.5 text-right border-r font-mono text-slate-300 bg-slate-100/10">-</td>
-          <td className="px-4 py-1.5 text-right border-r font-mono text-slate-400 bg-amber-50/40">{(uncategorizedTotal / monthCount).toFixed(2)}</td>
+          <td className="px-4 py-1.5 text-right border-r font-mono text-slate-400 bg-amber-50/40">
+            {type === 'income' ? '' : (uncategorizedTotal / monthCount) > 0 ? '-' : ''}{(uncategorizedTotal / monthCount).toFixed(2)}
+          </td>
           <td className="px-4 py-1.5 text-right font-mono text-slate-300 bg-slate-100/10">-</td>
         </tr>
       );
@@ -335,7 +406,7 @@ export const HomeView = () => {
         <div className="bg-white p-3 rounded border border-slate-200 shadow-sm">
           <p className="text-slate-500 uppercase font-bold text-[9px] mb-1">Keskmine kulu</p>
           <p className="text-xl font-bold text-rose-600">-{stats.avgExpense.toFixed(2)} €</p>
-          <p className="text-[10px] text-slate-400">Kokku: {stats.expense.toFixed(2)} €</p>
+          <p className="text-[10px] text-slate-400">Kokku: -{stats.expense.toFixed(2)} €</p>
         </div>
         <div className="bg-white p-3 rounded border border-slate-200 shadow-sm">
           <p className="text-slate-500 uppercase font-bold text-[9px] mb-1">Sääst / Vahe</p>
@@ -356,7 +427,7 @@ export const HomeView = () => {
             </div>
             <span className="font-bold text-[10px]">{Math.round((stats.expense / (stats.budgetExpense || 1)) * 100)}%</span>
           </div>
-          <p className="text-[10px] text-slate-400 italic">Eelarve: {stats.budgetExpense.toFixed(0)} €</p>
+          <p className="text-[10px] text-slate-400 italic">Eelarve: -{stats.budgetExpense.toFixed(2)} €</p>
         </div>
       </div>
 
@@ -393,14 +464,86 @@ export const HomeView = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {/* Tulud Section */}
-                <tr className="bg-emerald-50/30">
-                  <td colSpan={7 + (allMonths.length * 2)} className="px-4 py-1.5 font-bold text-emerald-800 uppercase tracking-wider text-[9px]">Sissetulekud</td>
+                <tr className="bg-emerald-100 font-bold text-emerald-950 uppercase text-[10px]">
+                  <td className="px-4 py-2 text-center border-r border-slate-200">
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-600 mx-auto" />
+                  </td>
+                  <td className="px-4 py-2 border-r border-slate-200 font-extrabold tracking-wider">
+                    Sissetulekud (KOKKU)
+                  </td>
+                  {groupStats.income.monthsData.map(d => (
+                    <React.Fragment key={d.month}>
+                      <td className="px-4 py-2 text-right border-r border-slate-200 font-mono text-[10px] bg-emerald-50/60 text-slate-700">
+                        {d.budget > 0 ? d.budget.toFixed(2) : '-'}
+                      </td>
+                      <td className="px-4 py-2 text-right border-r border-slate-200 font-mono text-[10px] text-emerald-700 bg-emerald-50/20">
+                        {d.actual > 0 ? d.actual.toFixed(2) : '-'}
+                      </td>
+                    </React.Fragment>
+                  ))}
+                  <td className="px-4 py-2 text-right border-r border-slate-200 font-mono font-black text-xs bg-emerald-50/80 text-emerald-950">
+                    {groupStats.income.totalBudget.toFixed(2)}
+                  </td>
+                  <td className="px-4 py-2 text-right border-r border-slate-200 font-mono font-black text-xs text-emerald-800 bg-emerald-50/50">
+                    {groupStats.income.totalActual.toFixed(2)}
+                  </td>
+                  <td className="px-4 py-2 text-right border-r border-slate-200 font-mono text-slate-600 bg-emerald-50/80">
+                    {groupStats.income.avgBudget.toFixed(2)}
+                  </td>
+                  <td className="px-4 py-2 text-right border-r border-slate-200 font-mono text-emerald-800 bg-emerald-50/50">
+                    {groupStats.income.avgActual.toFixed(2)}
+                  </td>
+                  <td className={cn(
+                    "px-4 py-2 text-right font-mono text-[10px] bg-emerald-50/80 border-slate-200",
+                    groupStats.income.totalBudget > 0 ? (
+                      (groupStats.income.totalActual / groupStats.income.totalBudget) > 1 ? "text-emerald-700 font-extrabold" :
+                      (groupStats.income.totalActual / groupStats.income.totalBudget) < 1 ? "text-rose-700 font-extrabold" : "text-slate-500"
+                    ) : "text-slate-400"
+                  )}>
+                    {groupStats.income.totalBudget > 0 ? `${(((groupStats.income.totalActual - groupStats.income.totalBudget) / groupStats.income.totalBudget) * 100).toFixed(0)}%` : '-'}
+                  </td>
                 </tr>
                 {renderCategoryRows('income')}
  
                 {/* Kulud Section */}
-                <tr className="bg-rose-50/30">
-                  <td colSpan={7 + (allMonths.length * 2)} className="px-4 py-1.5 font-bold text-rose-800 uppercase tracking-wider text-[9px]">Väljaminekud</td>
+                <tr className="bg-rose-100 font-bold text-rose-950 uppercase text-[10px] border-t-2 border-slate-200">
+                  <td className="px-4 py-2 text-center border-r border-slate-200">
+                    <TrendingDown className="w-3.5 h-3.5 text-rose-600 mx-auto" />
+                  </td>
+                  <td className="px-4 py-2 border-r border-slate-200 font-extrabold tracking-wider">
+                    Väljaminekud (KOKKU)
+                  </td>
+                  {groupStats.expense.monthsData.map(d => (
+                    <React.Fragment key={d.month}>
+                      <td className="px-4 py-2 text-right border-r border-slate-200 font-mono text-[10px] bg-rose-50/60 text-slate-700">
+                        {d.budget > 0 ? `-${d.budget.toFixed(2)}` : '-'}
+                      </td>
+                      <td className="px-4 py-2 text-right border-r border-slate-200 font-mono text-[10px] text-rose-700 bg-rose-50/20">
+                        {d.actual > 0 ? `-${d.actual.toFixed(2)}` : '-'}
+                      </td>
+                    </React.Fragment>
+                  ))}
+                  <td className="px-4 py-2 text-right border-r border-slate-200 font-mono font-black text-xs bg-rose-50/80 text-rose-950">
+                    {groupStats.expense.totalBudget > 0 ? `-${groupStats.expense.totalBudget.toFixed(2)}` : '0.00'}
+                  </td>
+                  <td className="px-4 py-2 text-right border-r border-slate-200 font-mono font-black text-xs text-rose-850 bg-rose-50/50">
+                    {groupStats.expense.totalActual > 0 ? `-${groupStats.expense.totalActual.toFixed(2)}` : '0.00'}
+                  </td>
+                  <td className="px-4 py-2 text-right border-r border-slate-200 font-mono text-slate-600 bg-rose-50/80">
+                    {groupStats.expense.avgBudget > 0 ? `-${groupStats.expense.avgBudget.toFixed(2)}` : '0.00'}
+                  </td>
+                  <td className="px-4 py-2 text-right border-r border-slate-200 font-mono text-rose-800 bg-rose-50/50">
+                    {groupStats.expense.avgActual > 0 ? `-${groupStats.expense.avgActual.toFixed(2)}` : '0.00'}
+                  </td>
+                  <td className={cn(
+                    "px-4 py-2 text-right font-mono text-[10px] bg-rose-50/80 border-slate-200",
+                    groupStats.expense.totalBudget > 0 ? (
+                      (groupStats.expense.totalActual / groupStats.expense.totalBudget) > 1 ? "text-rose-700 font-extrabold" :
+                      (groupStats.expense.totalActual / groupStats.expense.totalBudget) < 1 ? "text-emerald-700 font-extrabold" : "text-slate-500"
+                    ) : "text-slate-400"
+                  )}>
+                    {groupStats.expense.totalBudget > 0 ? `${(((groupStats.expense.totalActual - groupStats.expense.totalBudget) / groupStats.expense.totalBudget) * 100).toFixed(0)}%` : '-'}
+                  </td>
                 </tr>
                 {renderCategoryRows('expense')}
                 

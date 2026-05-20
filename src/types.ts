@@ -9,6 +9,7 @@ export interface Category {
   parentId?: string | null;
   isStarred?: boolean;
   userId: string;
+  savingsBucket?: 'necessities' | 'entertainment' | 'investments' | 'unassigned' | 'income' | null;
 }
 
 export type RuleField = 'recipient' | 'description';
@@ -35,6 +36,8 @@ export interface Transaction {
   categoryId?: string | null;
   userId: string;
   rawLine?: string;
+  accountNumber?: string;
+  accountName?: string;
 }
 
 export interface Budget {

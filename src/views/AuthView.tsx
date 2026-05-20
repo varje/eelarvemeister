@@ -3,22 +3,123 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { authService } from '../services/auth';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle, ExternalLink, HelpCircle } from 'lucide-react';
 
 export const AuthView = () => {
   const [loading, setLoading] = useState(false);
+  const [authError, setAuthError] = useState<{ code: string; message: string } | null>(null);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
+    setAuthError(null);
     try {
       await authService.signInWithGoogle();
       toast.success('Sisselogimine õnnestus!');
     } catch (e: any) {
       console.error('Google login error:', e);
-      toast.error('Google sisselogimine ebaõnnestus: ' + (e.message || 'Tundmatu viga'));
+      const errCode = e.code || '';
+      const errMsg = e.message || 'Tundmatu viga';
+      setAuthError({ code: errCode, message: errMsg });
+      toast.error('Google sisselogimine ebaõnnestus: ' + errMsg);
     } finally {
       setLoading(false);
     }
+  };
+
+  const getTroubleshootingGuide = () => {
+    if (!authError) return null;
+
+    const isConfigError = authError.code.includes('configuration-not-found') || authError.message.includes('configuration-not-found');
+    const isDomainError = authError.code.includes('unauthorized-domain') || authError.message.includes('unauthorized-domain');
+
+    if (isConfigError) {
+      return (
+        <div className="mt-6 bg-slate-950/60 border border-slate-800/80 rounded-lg p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-start gap-2.5 text-amber-400">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="text-[11px] font-semibold uppercase tracking-wider">Määramata Seadistus</div>
+          </div>
+          <p className="text-slate-400 text-[10px] leading-relaxed">
+            Sinu Firebase projektis pole veel <strong>Google sisselogimist</strong> lubatud.
+          </p>
+          <div className="text-[10px] text-slate-300 space-y-2 border-t border-slate-800/45 pt-2.5">
+            <p className="font-semibold text-slate-200">Kuidas seda lubada:</p>
+            <ol className="list-decimal pl-4 space-y-1.5 text-slate-400">
+              <li>Mine Firebase konsooli:
+                <a 
+                  href="https://console.firebase.google.com/project/eelarvemeister/authentication/providers" 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 underline ml-1"
+                >
+                  Ava Sign-in Providers <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              </li>
+              <li>Vajuta nuppu <strong className="text-slate-200">Add new provider</strong> ja vali <strong className="text-slate-200">Google</strong>.</li>
+              <li>Lülita sisse <strong className="text-slate-200">Enable</strong> liugur, määra oma projekti toe e-mail (näiteks <code className="bg-slate-800 px-1 rounded text-red-300 font-mono text-[9px]">{localStorage.getItem('userEmail') || 'oma meiliaadress'}</code>) ja vajuta <strong className="text-slate-200">Save</strong>.</li>
+            </ol>
+          </div>
+        </div>
+      );
+    }
+
+    if (isDomainError) {
+      const currentDomain = window.location.hostname;
+      return (
+        <div className="mt-6 bg-slate-950/60 border border-slate-800/80 rounded-lg p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-start gap-2.5 text-amber-400">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="text-[11px] font-semibold uppercase tracking-wider">Autoriseerimata Domeen</div>
+          </div>
+          <p className="text-slate-400 text-[10px] leading-relaxed">
+            See vaate domeen pole Firebase'i poolt lubatud. Turvalisuse huvides blokeerib Google sisselogimise autoriseerimata domeenidelt.
+          </p>
+          <div className="text-[10px] text-slate-300 space-y-2 border-t border-slate-800/45 pt-2.5">
+            <p className="font-semibold text-slate-200">Kuidas seda lubada:</p>
+            <ol className="list-decimal pl-4 space-y-1.5 text-slate-400">
+              <li>Mine Firebase seadetesse:
+                <a 
+                  href="https://console.firebase.google.com/project/eelarvemeister/authentication/settings" 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 underline ml-1"
+                >
+                  Ava Authentication Settings <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              </li>
+              <li>Vali menüüst <strong className="text-slate-200">Authorized domains</strong> (Autoriseeritud domeenid) vahekaart.</li>
+              <li>Vajuta <strong className="text-slate-200">Add domain</strong> ja lisa sinna järgmised domeenid:
+                <div className="mt-1.5 space-y-1">
+                  <div className="flex items-center justify-between bg-slate-900 border border-slate-800 px-2 py-1 rounded font-mono text-[9px] text-emerald-400">
+                    <span>ais-dev-ljcozx6crczn2p2rhtttwb-73344251347.europe-west1.run.app</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-slate-900 border border-slate-800 px-2 py-1 rounded font-mono text-[9px] text-emerald-400">
+                    <span>ais-pre-ljcozx6crczn2p2rhtttwb-73344251347.europe-west1.run.app</span>
+                  </div>
+                  {currentDomain && !currentDomain.includes('run.app') && currentDomain !== 'localhost' && (
+                    <div className="flex items-center justify-between bg-slate-900 border border-slate-800 px-2 py-1 rounded font-mono text-[9px] text-amber-400">
+                      <span>{currentDomain}</span>
+                    </div>
+                  )}
+                </div>
+              </li>
+              <li>Pärast domeenide salvestamist värskenda seda lehte ja proovi uuesti!</li>
+            </ol>
+          </div>
+        </div>
+      );
+    }
+
+    // Default general error info
+    return (
+      <div className="mt-4 bg-rose-950/40 border border-rose-900/40 rounded p-3 text-[10px] text-rose-300 leading-relaxed">
+        <div className="font-semibold uppercase tracking-wider mb-1 flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5 text-rose-400" /> Sisselogimise viga:</div>
+        <p className="font-mono text-[9px] text-rose-400 mb-2">{authError.message}</p>
+        <p className="text-slate-400 leading-normal">
+          Veendu, et sinu Firebase konsoolis on Google sisselogimine sisse lülitatud ning eelarvemeister.firebaseapp.com ning selle eelvaate domeenid on autoriseeritud.
+        </p>
+      </div>
+    );
   };
 
   return (
@@ -29,10 +130,9 @@ export const AuthView = () => {
             €
           </div>
           <CardTitle className="text-xl font-bold text-white tracking-tight">Eelarvemeister</CardTitle>
-
         </CardHeader>
         <CardContent className="space-y-6">
-          <p className="text-slate-400 text-[11px] text-center leading-relaxed">
+          <p className="text-slate-400 text-[11px] text-center leading-relaxed font-medium">
             Süsteemi sisenemiseks kasuta oma Google kontot. See tagab andmete turvalise säilitamise ja mugava ligipääsu.
           </p>
           <Button 
@@ -64,8 +164,9 @@ export const AuthView = () => {
             )}
             {loading ? 'HETK... ' : 'SISENE GOOGLE KONTOGA'}
           </Button>
-        </CardContent>
 
+          {getTroubleshootingGuide()}
+        </CardContent>
       </Card>
     </div>
   );

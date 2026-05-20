@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,9 @@ import {
   Check,
   Sparkles,
   Minus,
+  ChevronDown,
+  ChevronUp,
+  ChevronRight,
 } from "lucide-react";
 import { AUTO_RULE_PATTERNS } from "@/constants/autoRules";
 import {
@@ -40,6 +43,49 @@ export const SettingsView = () => {
   const [autoGenerating, setAutoGenerating] = useState(false);
   const [recategorizing, setRecategorizing] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [rulesCollapsed, setRulesCollapsed] = useState(false);
+  const [expandedCatIds, setExpandedCatIds] = useState<Record<string, boolean>>({});
+
+  const toggleCategoryExpand = (catId: string) => {
+    setExpandedCatIds((prev) => ({
+      ...prev,
+      [catId]: !prev[catId],
+    }));
+  };
+
+  const sortedTopLevelCategories = useMemo(() => {
+    const parentCats = categories.filter((c) => !c.parentId);
+    const typeOrder = {
+      income: 1,
+      expense: 2,
+      both: 3,
+    };
+    return [...parentCats].sort((a, b) => {
+      const orderA = typeOrder[a.type as keyof typeof typeOrder] || 4;
+      const orderB = typeOrder[b.type as keyof typeof typeOrder] || 4;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return a.name.localeCompare(b.name, "et");
+    });
+  }, [categories]);
+
+  const sortedRules = useMemo(() => {
+    const getCategoryName = (categoryId: string) => {
+      const cat = categories.find((c) => c.id === categoryId);
+      if (!cat) return "Tundmatu";
+      const parent = cat.parentId
+        ? categories.find((p) => p.id === cat.parentId)
+        : null;
+      return parent ? `${parent.name} > ${cat.name}` : cat.name;
+    };
+
+    return [...rules].sort((a, b) => {
+      const nameA = getCategoryName(a.categoryId).toLowerCase();
+      const nameB = getCategoryName(b.categoryId).toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+  }, [rules, categories]);
 
   const handleClearAllData = async () => {
     const userId = auth.currentUser?.uid;
@@ -166,9 +212,9 @@ export const SettingsView = () => {
 
   const handleAddRule = async () => {
     const userId = auth.currentUser?.uid;
-    const validConditions = ruleConditions.filter(
-      (c) => c.pattern.trim() !== "",
-    );
+    const validConditions = ruleConditions
+      .filter((c) => c.pattern.trim() !== "")
+      .map((c) => ({ ...c, pattern: c.pattern.trim() }));
 
     if (!userId || validConditions.length === 0 || !newRuleCategory) {
       return toast.error("Täida vähemalt üks tingimus ja vali kategooria");
@@ -383,11 +429,85 @@ export const SettingsView = () => {
 
       <div className="flex-1 p-6 overflow-auto bg-slate-50">
         <div className="max-w-4xl mx-auto space-y-8 pb-12">
+          {/* Storage Sync Preference */}
+          <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm text-slate-100">
+            <h3 className="text-white font-bold text-xs tracking-wide uppercase mb-2 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+              Andmesalvestuse eelistus (Pilv vs Kohalik)
+            </h3>
+            <p className="text-slate-400 text-[11px] leading-relaxed mb-4">
+              Süsteem toetab andmete reaalajas sünkroniseerimist Google Cloud Firestore andmebaasiga või täielikult kohalikku, turvalist salvestust sinu veebibrauseri mälus (LocalStorage). Vali endale sobivaim:
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => {
+                  if (localStorage.getItem('eelarvemeister_use_local_db') === 'true') {
+                    localStorage.removeItem('eelarvemeister_use_local_db');
+                    toast.success('Lülitatud Google Cloud pilveandmebaasi režiimile. Leht uueneb...');
+                    setTimeout(() => window.location.reload(), 1200);
+                  }
+                }}
+                className={cn(
+                  "flex-1 p-3.5 rounded-lg border text-left transition-all cursor-pointer",
+                  localStorage.getItem('eelarvemeister_use_local_db') !== 'true'
+                    ? "bg-blue-950/40 border-blue-500/50 text-blue-200"
+                    : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-300"
+                )}
+              >
+                <div className="font-bold text-[11px] uppercase tracking-wide flex items-center justify-between">
+                  <span>Google Cloud sünkroniseerimine (Firestore)</span>
+                  {localStorage.getItem('eelarvemeister_use_local_db') !== 'true' && (
+                    <span className="bg-blue-500 text-white text-[8px] px-1.5 py-0.5 rounded uppercase font-extrabold leading-none">Aktiivne</span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+                  Andmed salvestatakse turvaliselt pilve ja sünkroniseeritakse reaalajas üle kõigi sinu seadmete. Vajab aktiivset Firestore andmebaasi.
+                </p>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (localStorage.getItem('eelarvemeister_use_local_db') !== 'true') {
+                    localStorage.setItem('eelarvemeister_use_local_db', 'true');
+                    toast.success('Lülitatud brauseripõhisele kohalikule salvestusele. Leht uueneb...');
+                    setTimeout(() => window.location.reload(), 1200);
+                  }
+                }}
+                className={cn(
+                  "flex-1 p-3.5 rounded-lg border text-left transition-all cursor-pointer",
+                  localStorage.getItem('eelarvemeister_use_local_db') === 'true'
+                    ? "bg-amber-950/40 border-amber-500/50 text-amber-200"
+                    : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-300"
+                )}
+              >
+                <div className="font-bold text-[11px] uppercase tracking-wide flex items-center justify-between">
+                  <span>Kohalik brauseri salvestus (LocalStorage)</span>
+                  {localStorage.getItem('eelarvemeister_use_local_db') === 'true' && (
+                    <span className="bg-amber-500 text-black text-[8px] px-1.5 py-0.5 rounded uppercase font-extrabold leading-none">Aktiivne</span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+                  Andmed salvestatakse täielikult kohalikus arvutis. Ühtegi kirjet ei saadeta pilve – puudub vajadus Firestore aktiveerimise järele.
+                </p>
+              </button>
+            </div>
+          </section>
+
           <section>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                Automaatse kategoriseerimise reeglid
-              </h2>
+              <div 
+                className="flex items-center gap-2 cursor-pointer select-none group"
+                onClick={() => setRulesCollapsed(!rulesCollapsed)}
+              >
+                <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 group-hover:text-slate-600 transition-colors">
+                  Automaatse kategoriseerimise reeglid
+                </h2>
+                {rulesCollapsed ? (
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                ) : (
+                  <ChevronUp className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                )}
+              </div>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -419,7 +539,8 @@ export const SettingsView = () => {
                 </Button>
               </div>
             </div>
-            <div className="bg-white rounded border border-slate-200 p-4 shadow-sm">
+            {!rulesCollapsed && (
+              <div className="bg-white rounded border border-slate-200 p-4 shadow-sm animate-in fade-in duration-200">
               <div className="space-y-4 mb-6">
                 <div className="text-[10px] uppercase font-bold text-slate-400">
                   Uus reegel
@@ -581,13 +702,13 @@ export const SettingsView = () => {
               </div>
 
               <div className="space-y-1">
-                {rules.length === 0 ? (
+                {sortedRules.length === 0 ? (
                   <p className="text-[10px] text-slate-400 italic">
                     Reegleid veel pole.
                   </p>
                 ) : (
                   <div className="divide-y divide-slate-50 border-t border-slate-100">
-                    {rules.map((rule) => (
+                    {sortedRules.map((rule) => (
                       <div
                         key={rule.id}
                         className="py-2 flex justify-between items-center text-[10px]"
@@ -652,22 +773,14 @@ export const SettingsView = () => {
                 )}
               </div>
             </div>
-          </section>
+          )}
+        </section>
 
           <section>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
                 Halda kategooriaid
               </h2>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-[10px] border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100 hover:text-amber-950 font-bold gap-2"
-                onClick={handleSetupRequestedCategories}
-                disabled={saving}
-              >
-                LISA INVESTEERINGUD JA TOETUSED
-              </Button>
             </div>
 
             {/* Add/Edit Category Form */}
@@ -785,17 +898,38 @@ export const SettingsView = () => {
 
             <div className="grid grid-cols-1 gap-3">
               {/* List Top Level Categories */}
-              {categories
-                .filter((c) => !c.parentId)
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((cat) => (
+              {sortedTopLevelCategories.map((cat) => {
+                const subcats = categories
+                  .filter((sub) => sub.parentId === cat.id)
+                  .sort((a, b) => a.name.localeCompare(b.name, "et"));
+                const hasSubcats = subcats.length > 0;
+
+                return (
                   <div key={cat.id} className="space-y-2">
                     <div className="flex justify-between items-center p-3 bg-white rounded border border-slate-200 shadow-sm transition-hover hover:border-slate-300">
                       <div className="flex items-center gap-3">
+                        {hasSubcats ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+                            onClick={() => toggleCategoryExpand(cat.id)}
+                            title={expandedCatIds[cat.id] ? "Peida alamkategooriat" : "Näita alamkategooriaid"}
+                          >
+                            <ChevronRight
+                              className={cn(
+                                "w-4 h-4 transition-transform duration-200",
+                                expandedCatIds[cat.id] && "rotate-90"
+                              )}
+                            />
+                          </Button>
+                        ) : (
+                          <div className="w-6 shrink-0" />
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 p-0"
+                          className="h-6 w-6 p-0 shrink-0"
                           onClick={() => handleToggleStar(cat)}
                         >
                           <Star
@@ -807,12 +941,20 @@ export const SettingsView = () => {
                             )}
                           />
                         </Button>
-                        <span className="font-bold text-[12px] text-slate-800 tracking-tight">
+                        <span 
+                          className={cn(
+                            "font-bold text-[12px] text-slate-800 tracking-tight select-none",
+                            hasSubcats ? "cursor-pointer hover:text-blue-700 transition-colors" : ""
+                          )}
+                          onClick={() => {
+                            if (hasSubcats) toggleCategoryExpand(cat.id);
+                          }}
+                        >
                           {cat.name}
                         </span>
                         <span
                           className={cn(
-                            "text-[8px] uppercase font-bold px-1.5 py-0.5 rounded border leading-none",
+                            "text-[8px] uppercase font-bold px-1.5 py-0.5 rounded border leading-none shrink-0",
                             cat.type === "income"
                               ? "bg-emerald-50 text-emerald-700 border-emerald-100"
                               : cat.type === "expense"
@@ -824,15 +966,15 @@ export const SettingsView = () => {
                             ? "Tulu"
                             : cat.type === "expense"
                               ? "Kulu"
-                              : "Eira"}
+                              : "Mõlemad"}
                         </span>
                         {cat.isStarred && (
-                          <span className="text-[8px] text-amber-500 font-bold uppercase">
+                          <span className="text-[8px] text-amber-500 font-bold uppercase shrink-0">
                             Ignoreeritud
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 shrink-0">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -853,11 +995,9 @@ export const SettingsView = () => {
                     </div>
 
                     {/* Subcategories */}
-                    <div className="pl-8 space-y-2 border-l border-slate-200 ml-6">
-                      {categories
-                        .filter((sub) => sub.parentId === cat.id)
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((sub) => (
+                    {expandedCatIds[cat.id] && hasSubcats && (
+                      <div className="pl-8 space-y-2 border-l border-slate-200 ml-6 animate-in fade-in slide-in-from-top-1 duration-200">
+                        {subcats.map((sub) => (
                           <div
                             key={sub.id}
                             className="flex justify-between items-center p-2 bg-slate-50/50 rounded border border-slate-100 group transition-hover hover:bg-white hover:border-slate-200"
@@ -907,9 +1047,11 @@ export const SettingsView = () => {
                             </div>
                           </div>
                         ))}
-                    </div>
+                      </div>
+                    )}
                   </div>
-                ))}
+                );
+              })}
             </div>
           </section>
 
