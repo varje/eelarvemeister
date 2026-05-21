@@ -316,7 +316,7 @@ export const ChartsView = () => {
                               outerRadius={95}
                               paddingAngle={4}
                               dataKey="value"
-                              label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                              label={({ name }) => name}
                             >
                               {pieData.map((entry, index) => (
                                 <Cell 
@@ -329,7 +329,7 @@ export const ChartsView = () => {
                             </Pie>
                             <Tooltip 
                               contentStyle={{ fontSize: '10px', borderRadius: '4px', border: '1px solid #e2e8f0' }}
-                              formatter={(value: number) => [`${value.toFixed(2)} €`, 'Summa']} 
+                              formatter={(value: number, name: string) => [`${value.toFixed(2)} €`, name]} 
                             />
                           </PieChart>
                         </ResponsiveContainer>

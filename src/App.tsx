@@ -42,18 +42,38 @@ export default function App() {
           
           setUser({ ...firebaseUser, ...profile });
           
-          // Ensure default categories exist in parallel
+          // Ensure default categories exist properly (handling parentId relationships)
           const cats = await dbService.getCategories(firebaseUser.uid);
           if (cats.length === 0) {
-            console.log('Populating default categories...');
-            await Promise.all(DEFAULT_CATEGORIES.map(cat => 
-              dbService.addCategory(firebaseUser.uid, {
+            console.log('Populating default categories with relationships...');
+            // Step 1: Filter and add parent categories
+            const parentsOnly = DEFAULT_CATEGORIES.filter(cat => !(cat as any).parent);
+            const parentIdMap: Record<string, string> = {};
+            
+            for (const cat of parentsOnly) {
+              const docRef = await dbService.addCategory(firebaseUser.uid, {
                 name: cat.name,
                 type: cat.type as any,
-                isStarred: cat.isStarred,
+                isStarred: cat.isStarred || false,
                 parentId: null
-              })
-            ));
+              });
+              if (docRef?.id) {
+                parentIdMap[cat.name] = docRef.id;
+              }
+            }
+            
+            // Step 2: Filter and add children categories pointing to correct parentIds
+            const childrenOnly = DEFAULT_CATEGORIES.filter(cat => (cat as any).parent);
+            await Promise.all(childrenOnly.map(cat => {
+              const pName = (cat as any).parent;
+              const parentId = pName ? (parentIdMap[pName] || null) : null;
+              return dbService.addCategory(firebaseUser.uid, {
+                name: cat.name,
+                type: cat.type as any,
+                isStarred: cat.isStarred || false,
+                parentId
+              });
+            }));
           }
         } else {
           setUser(null);

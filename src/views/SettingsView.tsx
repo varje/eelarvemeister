@@ -146,34 +146,167 @@ export const SettingsView = () => {
 
     setAutoGenerating(true);
     try {
-      const existingPatterns = new Set(
-        rules.map((r) => r.pattern.toUpperCase()),
-      );
+      // 1. Gather all unique existing patterns to avoid duplicates (checking both pattern and inner conditions)
+      const existingPatterns = new Set<string>();
+      for (const r of rules) {
+        if (r.pattern) {
+          existingPatterns.add(r.pattern.toUpperCase().trim());
+        }
+        if (r.conditions) {
+          for (const c of r.conditions) {
+            if (c.pattern) {
+              existingPatterns.add(c.pattern.toUpperCase().trim());
+            }
+          }
+        }
+      }
+
       const newRulesToCreate: any[] = [];
 
-      for (const autoRule of AUTO_RULE_PATTERNS) {
-        if (existingPatterns.has(autoRule.pattern.toUpperCase())) continue;
+      // 2. STAGE A: Map base Estonian merchants to correct new categories if they doesn't exist
+      const staticEstonianRules = [
+        // Shopping & Groceries
+        { keywords: ['MAXIMA', 'RIMI', 'SELVER', 'PRISMA', 'COOP', 'LIDL', 'GROSSI', 'SÄÄSTUKAART'], category: 'Toidupood' },
+        // Eating out
+        { keywords: ['BOLT.EU/FOOD', 'WOLT', 'FUDY', 'HESBURGER', 'MCDONALDS', 'KEBAB', 'PIZZA', 'BURGER'], category: 'Väljas söömine' },
+        // Transport & Fuel
+        { keywords: ['CIRCLE K', 'OLEREX', 'NESTÉ', 'ALEXELA', 'KÜTUS', 'STATOIL'], category: 'Kütus' },
+        { keywords: ['BOLT.EU/RIDE', 'UBER', 'ELRON', 'TAKSO', 'BUSSIJAAM'], category: 'Transport' },
+        // Communication
+        { keywords: ['TELIA', 'ELISA', 'TELE2'], category: 'Internet, telefon, TV' },
+        // Utilities
+        { keywords: ['ELEKTRILEVI', 'EESTI ENERGIA'], category: 'Elekter' },
+        { keywords: ['GAAS', 'EESTI GAAS'], category: 'Gaas' },
+        { keywords: ['TALLINNA VESI'], category: 'Vesi' },
+        // Income
+        { keywords: ['TÖÖTASU', 'PALK'], category: 'Palk' },
+        { keywords: ['DIVIDEND', 'DIVIDENDS'], category: 'Dividenditulu' },
+        { keywords: ['INTRESS', 'INTRESSID'], category: 'Intressitulu' },
+        { keywords: ['LAPSETOETUS', 'SOTSIAALKINDLUSTUSAMET'], category: 'Peretoetus' },
+        { keywords: ['TÖÖTUKASSA'], category: 'Töötutoetus' },
+        // Finance & banking
+        { keywords: ['LHV PANK', 'SWEDBANK', 'SEB PANK', 'COOP PANK', 'FINANTSTEENUS', 'KAARDITASU'], category: 'Finantsteenused' },
+        // Home loan
+        { keywords: ['KODULAEN', 'HIPOTEEK', 'KRT-LAENU', 'LAENUMAKSE'], category: 'Kodulaen' },
+        // Others
+        { keywords: ['APTEEK', 'APOTHEKA', 'BENU', 'SÜDAMEAPTEEK'], category: 'Apteek' },
+        { keywords: ['III SAMMAS', 'PENSIONISAMMAS'], category: 'III sammas' },
+        { keywords: ['OMAD VAHELISED MAKSED', 'VAHELISED MAKSED'], category: 'Kanded oma kontode vahel' },
+        { keywords: ['KINGITUS', 'LILLED'], category: 'Kingitused' },
+        { keywords: ['LÄHETUS'], category: 'Lähetus' }
+      ];
 
+      for (const ruleGroup of staticEstonianRules) {
         const category = categories.find(
-          (c) => c.name.toLowerCase() === autoRule.categoryName.toLowerCase(),
+          (c) => c.name.toLowerCase() === ruleGroup.category.toLowerCase()
         );
-        if (category) {
+        if (!category) continue;
+
+        for (const kw of ruleGroup.keywords) {
+          const uKw = kw.toUpperCase().trim();
+          if (existingPatterns.has(uKw)) continue;
+
           newRulesToCreate.push({
-            pattern: autoRule.pattern,
-            categoryId: category.id,
+            pattern: kw,
+            conditions: [{ field: 'recipient', pattern: kw }],
+            categoryId: category.id
           });
+          existingPatterns.add(uKw);
+        }
+      }
+
+      // 3. STAGE B: Dynamic transaction and text intelligence analysis
+      // Group candidate frequencies of (cleaned word/phrase) -> categoryId
+      const candidateCounts: Record<string, Record<string, number>> = {};
+      const noiseWords = new Set([
+        'oü', 'as', 'mtü', 'oy', 'ou', 'oe', 'aktsiaselts', 'osaühing', 'filiaal', 'peremarket', 'peremarketid', 
+        'klubi', 'ee', 'eest', 'makse', 'kanne', 'ülekanne', 'sepa', 'sepa-makse', 'kaardimakse', 'sularaha', 
+        'tehing', 'pank', 'swedbank', 'lhv', 'seb', 'coop', 'pank', 'kontole'
+      ]);
+
+      for (const t of transactions) {
+        if (!t.categoryId) continue;
+
+        // Skip if there's already a rule that matches this transaction
+        const matchesExisting = applyRules(t, rules);
+        if (matchesExisting) continue;
+
+        // Use recipient if available index, otherwise description
+        const textToUse = t.recipient?.trim() || t.description?.trim() || '';
+        if (!textToUse) continue;
+
+        // Clean common business suffixes and special characters
+        const cleaned = textToUse
+          .replace(/(?:oü|as|mtü|oy|ou|oe|aktsiaselts|osaühing|sa|ltd|gmbh|filiaal|peremarket|food|eesti)\.?$/gi, '')
+          .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, ' ')
+          .trim();
+
+        const words = cleaned.split(/\s+/).filter(w => w.length > 2 && isNaN(Number(w)));
+        if (words.length === 0) continue;
+
+        // Extract pattern: Check if first word is distinctive, or use multi-words
+        const firstWord = words[0].toUpperCase();
+        const firstTwoWords = words.length > 1 ? `${words[0]} ${words[1]}`.toUpperCase() : firstWord;
+
+        const genericAvoid = new Set(['MAKSE', 'KANNE', 'ÜLEKANNE', 'KREEDIT', 'KAARDIMAKSE', 'SULARAHA', 'VIITENUMBER', 'ARVE', 'TEHING']);
+
+        let patternToUse = "";
+        if (!genericAvoid.has(firstWord) && firstWord.length >= 3) {
+          patternToUse = words[0]; // Keep original cases for user appeal
+        } else if (words.length > 1 && !genericAvoid.has(firstTwoWords)) {
+          patternToUse = `${words[0]} ${words[1]}`;
+        }
+
+        if (patternToUse) {
+          const capitalizedPattern = patternToUse.charAt(0).toUpperCase() + patternToUse.slice(1);
+          if (!candidateCounts[capitalizedPattern]) {
+            candidateCounts[capitalizedPattern] = {};
+          }
+          candidateCounts[capitalizedPattern][t.categoryId] = (candidateCounts[capitalizedPattern][t.categoryId] || 0) + 1;
+        }
+      }
+
+      // Convert most prominent dynamic candidates to actual rules
+      let dynamicCount = 0;
+      for (const pattern of Object.keys(candidateCounts)) {
+        const uPattern = pattern.toUpperCase().trim();
+        if (existingPatterns.has(uPattern)) continue;
+
+        const cats = candidateCounts[pattern];
+        let maxCatId = "";
+        let maxCount = 0;
+        for (const [catId, count] of Object.entries(cats)) {
+          if (count > maxCount) {
+            maxCount = count;
+            maxCatId = catId;
+          }
+        }
+
+        if (maxCatId) {
+          newRulesToCreate.push({
+            pattern: pattern,
+            conditions: [{ field: 'recipient', pattern: pattern }],
+            categoryId: maxCatId
+          });
+          existingPatterns.add(uPattern);
+          dynamicCount++;
         }
       }
 
       if (newRulesToCreate.length === 0) {
-        toast.info("Kõik sobilikud reeglid on juba olemas");
+        toast.info("Kõik võimalikud automaatsed reeglid on juba loodud!");
         return;
       }
 
       await dbService.addRules(userId, newRulesToCreate);
-      toast.success(`${newRulesToCreate.length} reeglit automaatselt lisatud`);
+      toast.success(
+        `Edukalt salvestatud ${newRulesToCreate.length} uut reeglit! (millest ${dynamicCount} põhinevad kandeandmete analüüsil.)`,
+        { duration: 8000 }
+      );
+      refresh();
     } catch (e: any) {
-      toast.error("Automaatne genereerimine ebaõnnestus");
+      console.error(e);
+      toast.error("Automaatsete reeglite genereerimine ebaõnnestus.");
     } finally {
       setAutoGenerating(false);
     }
@@ -319,13 +452,13 @@ export const SettingsView = () => {
 
     setSaving(true);
     try {
-      // 1. Investeeringute tulu
+      // 1. Investeerimistulu
       let invParent = categories.find(
-        (c) => c.name === "Investeeringute tulu" && !c.parentId,
+        (c) => c.name === "Investeerimistulu" && !c.parentId,
       );
       if (!invParent) {
         const docRef = await dbService.addCategory(userId, {
-          name: "Investeeringute tulu",
+          name: "Investeerimistulu",
           type: "income",
           isStarred: false,
           parentId: null,
@@ -333,7 +466,7 @@ export const SettingsView = () => {
         if (docRef)
           invParent = {
             id: docRef.id,
-            name: "Investeeringute tulu",
+            name: "Investeerimistulu",
             type: "income",
             isStarred: false,
             parentId: null,
@@ -343,22 +476,22 @@ export const SettingsView = () => {
 
       if (invParent) {
         const sub1 = categories.find(
-          (c) => c.name === "intressitulu" && c.parentId === invParent?.id,
+          (c) => c.name === "Intressitulu" && c.parentId === invParent?.id,
         );
         if (!sub1)
           await dbService.addCategory(userId, {
-            name: "intressitulu",
+            name: "Intressitulu",
             type: "income",
             isStarred: false,
             parentId: invParent.id,
           });
 
         const sub2 = categories.find(
-          (c) => c.name === "dividendid" && c.parentId === invParent?.id,
+          (c) => c.name === "Dividenditulu" && c.parentId === invParent?.id,
         );
         if (!sub2)
           await dbService.addCategory(userId, {
-            name: "dividendid",
+            name: "Dividenditulu",
             type: "income",
             isStarred: false,
             parentId: invParent.id,
@@ -388,7 +521,7 @@ export const SettingsView = () => {
       }
 
       if (toetParent) {
-        const subs = ["Lapsetoetus", "Töövõimehüvitis", "Haigusrahad"];
+        const subs = ["Peretoetus", "Puudetoetus", "Töötutoetus"];
         for (const s of subs) {
           const sub = categories.find(
             (c) => c.name === s && c.parentId === toetParent?.id,
