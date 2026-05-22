@@ -23,26 +23,54 @@ export const useFinanceData = () => {
 
     // Queries
     const qCats = query(collection(db, 'categories'), where('userId', '==', userId));
-    const qTrans = query(collection(db, 'transactions'), where('userId', '==', userId), orderBy('date', 'desc'));
+    const qTrans = query(collection(db, 'transactions'), where('userId', '==', userId));
     const qRules = query(collection(db, 'rules'), where('userId', '==', userId));
     const qBudgets = query(collection(db, 'budgets'), where('userId', '==', userId));
 
-    const unsubCats = onSnapshot(qCats, (snapshot) => {
-      setCategories(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Category)));
-      setLoading(false);
-    });
+    const unsubCats = onSnapshot(
+      qCats, 
+      (snapshot) => {
+        setCategories(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Category)));
+        setLoading(false);
+      },
+      (error) => {
+        console.error("onSnapshot Categories error:", error);
+        setLoading(false);
+      }
+    );
 
-    const unsubTrans = onSnapshot(qTrans, (snapshot) => {
-      setTransactions(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
-    });
+    const unsubTrans = onSnapshot(
+      qTrans, 
+      (snapshot) => {
+        const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+        // Sort descending by date (recent transactions first)
+        list.sort((a, b) => b.date.localeCompare(a.date));
+        setTransactions(list);
+      },
+      (error) => {
+        console.error("onSnapshot Transactions error:", error);
+      }
+    );
 
-    const unsubRules = onSnapshot(qRules, (snapshot) => {
-      setRules(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Rule)));
-    });
+    const unsubRules = onSnapshot(
+      qRules, 
+      (snapshot) => {
+        setRules(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Rule)));
+      },
+      (error) => {
+        console.error("onSnapshot Rules error:", error);
+      }
+    );
 
-    const unsubBudgets = onSnapshot(qBudgets, (snapshot) => {
-      setBudgets(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Budget)));
-    });
+    const unsubBudgets = onSnapshot(
+      qBudgets, 
+      (snapshot) => {
+        setBudgets(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Budget)));
+      },
+      (error) => {
+        console.error("onSnapshot Budgets error:", error);
+      }
+    );
 
     return () => {
       unsubCats();

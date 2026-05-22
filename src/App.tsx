@@ -30,14 +30,18 @@ export default function App() {
     const unsubscribe = authService.onAuthChange(async (firebaseUser) => {
       try {
         if (firebaseUser) {
-          const profile = await authService.getUserProfile(firebaseUser.uid);
+          let profile = await authService.getUserProfile(firebaseUser.uid);
           
           if (!profile) {
             // Create fallback profile if it somehow doesn't exist
-            await setDoc(doc(db, 'users', firebaseUser.uid), {
+            const fallbackProfile = {
               username: firebaseUser.email?.split('@')[0] || 'Kasutaja',
+            };
+            await setDoc(doc(db, 'users', firebaseUser.uid), {
+              username: fallbackProfile.username,
               createdAt: serverTimestamp()
             });
+            profile = fallbackProfile;
           }
           
           setUser({ ...firebaseUser, ...profile });

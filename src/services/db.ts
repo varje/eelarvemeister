@@ -92,10 +92,11 @@ export const dbService = {
   },
 
   async getTransactions(userId: string): Promise<Transaction[]> {
-    const q = query(collection(db, 'transactions'), where('userId', '==', userId), orderBy('date', 'desc'));
+    const q = query(collection(db, 'transactions'), where('userId', '==', userId));
     try {
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+      return list.sort((a, b) => b.date.localeCompare(a.date));
     } catch (e) {
       handleFirestoreError(e, 'get' as any, 'transactions');
       return [];
