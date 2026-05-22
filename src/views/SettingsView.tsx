@@ -21,6 +21,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { AUTO_RULE_PATTERNS } from "@/constants/autoRules";
+import { DEFAULT_CATEGORIES } from "../constants";
 import {
   Select,
   SelectContent,
@@ -545,6 +546,60 @@ export const SettingsView = () => {
     }
   };
 
+  const handleResetCategories = async () => {
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+
+    const confirmReset = window.confirm(
+      "Oled sa kindel, et soovid KÕIK kategooriad algseadistada? See kustutab kõik sinu praegused seadistatud kategooriad ja asendab need esialgsete vaikimisi kategooriatega!"
+    );
+    if (!confirmReset) return;
+
+    setSaving(true);
+    try {
+      // 1. Delete all current categories for the user
+      for (const cat of categories) {
+        await dbService.deleteCategory(cat.id);
+      }
+
+      // 2. Add original categories with relationships
+      const parentsOnly = DEFAULT_CATEGORIES.filter(cat => !(cat as any).parent);
+      const parentIdMap: Record<string, string> = {};
+      
+      for (const cat of parentsOnly) {
+        const docRef = await dbService.addCategory(userId, {
+          name: cat.name,
+          type: cat.type as any,
+          isStarred: cat.isStarred || false,
+          parentId: null
+        });
+        if (docRef?.id) {
+          parentIdMap[cat.name] = docRef.id;
+        }
+      }
+      
+      const childrenOnly = DEFAULT_CATEGORIES.filter(cat => (cat as any).parent);
+      await Promise.all(childrenOnly.map(cat => {
+        const pName = (cat as any).parent;
+        const parentId = pName ? (parentIdMap[pName] || null) : null;
+        return dbService.addCategory(userId, {
+          name: cat.name,
+          type: cat.type as any,
+          isStarred: cat.isStarred || false,
+          parentId
+        });
+      }));
+
+      toast.success("Kategooriad on algseadistatud ja vaikimisi kategooriad taastatud!");
+      refresh();
+    } catch (e: any) {
+      console.error(e);
+      toast.error("Kategooriate taastamine ebaõnnestus");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -850,6 +905,15 @@ export const SettingsView = () => {
               <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
                 Halda kategooriaid
               </h2>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-[10px] border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800 font-bold"
+                onClick={handleResetCategories}
+                disabled={saving}
+              >
+                Algseadista kategooriad
+              </Button>
             </div>
 
             {/* Add/Edit Category Form */}
